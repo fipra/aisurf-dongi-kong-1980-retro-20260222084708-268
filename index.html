@@ -42,6 +42,7 @@
             left: 10px;
             font-size: 18px;
             pointer-events: none;
+            z-index: 5;
         }
 
         #controls {
@@ -83,25 +84,28 @@
             background: #d33;
         }
 
-        .hidden { display: none; }
+        .hidden { display: none !important; }
         #start-screen {
             position: absolute;
             top: 0; left: 0; width: 100%; height: 100%;
-            background: rgba(0,0,0,0.8);
+            background: rgba(0,0,0,0.9);
             display: flex;
             flex-direction: column;
             justify-content: center;
             align-items: center;
-            z-index: 10;
+            z-index: 100;
             text-align: center;
         }
         button#play-btn {
             padding: 15px 30px;
-            font-size: 20px;
+            font-size: 24px;
             background: #f00;
             color: white;
             border: none;
             cursor: pointer;
+            font-family: inherit;
+            font-weight: bold;
+            border-radius: 5px;
         }
     </style>
 </head>
@@ -133,8 +137,9 @@
         const canvas = document.getElementById('gameCanvas');
         const ctx = canvas.getContext('2d');
         const scoreEl = document.getElementById('score');
+        const playBtn = document.getElementById('play-btn');
+        const startScreen = document.getElementById('start-screen');
 
-        // Game constants
         canvas.width = 240;
         canvas.height = 320;
         
@@ -143,26 +148,19 @@
         let frameCount = 0;
 
         const player = {
-            x: 30,
-            y: 280,
-            w: 12,
-            h: 16,
-            vx: 0,
-            vy: 0,
-            speed: 1.5,
-            jumpPower: -4.5,
-            gravity: 0.25,
-            grounded: false,
-            climbing: false
+            x: 30, y: 280, w: 12, h: 16,
+            vx: 0, vy: 0, speed: 1.5,
+            jumpPower: -4.5, gravity: 0.25,
+            grounded: false, climbing: false
         };
 
         const platforms = [
-            {x: 0, y: 300, w: 240, h: 10, type: 'floor'}, // Ground
-            {x: 0, y: 250, w: 200, h: 8, type: 'floor'},
-            {x: 40, y: 200, w: 200, h: 8, type: 'floor'},
-            {x: 0, y: 150, w: 200, h: 8, type: 'floor'},
-            {x: 40, y: 100, w: 100, h: 8, type: 'floor'},
-            {x: 100, y: 50, w: 60, h: 8, type: 'floor'} // Top goal
+            {x: 0, y: 300, w: 240, h: 10},
+            {x: 0, y: 250, w: 200, h: 8},
+            {x: 40, y: 200, w: 200, h: 8},
+            {x: 0, y: 150, w: 200, h: 8},
+            {x: 40, y: 100, w: 100, h: 8},
+            {x: 100, y: 50, w: 60, h: 8}
         ];
 
         const ladders = [
@@ -174,8 +172,6 @@
         ];
 
         let barrels = [];
-
-        // Inputs
         const keys = {};
         const touch = { left: false, right: false, up: false, down: false, jump: false };
 
@@ -184,8 +180,9 @@
 
         function bindTouch(id, key) {
             const btn = document.getElementById(id);
-            btn.addEventListener('touchstart', (e) => { e.preventDefault(); touch[key] = true; });
-            btn.addEventListener('touchend', (e) => { e.preventDefault(); touch[key] = false; });
+            const handler = (val) => (e) => { e.preventDefault(); touch[key] = val; };
+            btn.addEventListener('touchstart', handler(true));
+            btn.addEventListener('touchend', handler(false));
             btn.addEventListener('mousedown', () => touch[key] = true);
             btn.addEventListener('mouseup', () => touch[key] = false);
         }
@@ -196,28 +193,29 @@
         bindTouch('down-btn', 'down');
         bindTouch('jump-btn', 'jump');
 
-        function resetGame() {
+        function resetGame(e) {
+            if(e) e.preventDefault();
             player.x = 30; player.y = 280; player.vx = 0; player.vy = 0;
             barrels = [];
             score = 0;
+            frameCount = 0;
             scoreEl.innerText = score;
             gameState = 'playing';
-            document.getElementById('start-screen').classList.add('hidden');
+            startScreen.classList.add('hidden');
         }
 
-        document.getElementById('play-btn').onclick = resetGame;
+        playBtn.addEventListener('click', resetGame);
+        playBtn.addEventListener('touchstart', resetGame);
 
         function update() {
             if (gameState !== 'playing') return;
 
             frameCount++;
 
-            // Movement
             if (keys['ArrowLeft'] || touch.left) player.vx = -player.speed;
             else if (keys['ArrowRight'] || touch.right) player.vx = player.speed;
             else player.vx = 0;
 
-            // Ladder Check
             let onLadder = ladders.find(l => 
                 player.x + player.w > l.x && player.x < l.x + l.w &&
                 player.y + player.h > l.y && player.y < l.y + l.h
@@ -231,12 +229,7 @@
                 player.climbing = false;
             }
 
-            // Gravity
-            if (!player.climbing) {
-                player.vy += player.gravity;
-            }
-
-            // Jump
+            if (!player.climbing) player.vy += player.gravity;
             if ((keys['Space'] || touch.jump) && player.grounded && !player.climbing) {
                 player.vy = player.jumpPower;
                 player.grounded = false;
@@ -245,7 +238,6 @@
             player.x += player.vx;
             player.y += player.vy;
 
-            // Platform Collision
             player.grounded = false;
             platforms.forEach(p => {
                 if (player.vy >= 0 && 
@@ -258,14 +250,11 @@
                 }
             });
 
-            // Spawn Barrels
-            if (frameCount % 120 === 0) {
-                barrels.push({ x: 120, y: 40, vx: 1.5, r: 5 });
-            }
+            if (frameCount % 120 === 0) barrels.push({ x: 120, y: 40, vx: 1.5, r: 5 });
 
-            // Update Barrels
-            barrels.forEach((b, index) => {
-                b.y += 2; // Gravity
+            for (let i = barrels.length - 1; i >= 0; i--) {
+                let b = barrels[i];
+                b.y += 2;
                 let bGrounded = false;
                 platforms.forEach(p => {
                     if (b.x > p.x && b.x < p.x + p.w && b.y + b.r > p.y && b.y + b.r < p.y + 10) {
@@ -275,32 +264,26 @@
                 });
 
                 if (bGrounded) {
-                    // Simple AI: reverse at edges
-                    let p = platforms.find(p => b.y + b.r === p.y);
+                    let p = platforms.find(p => Math.abs(b.y + b.r - p.y) < 2);
                     if (p && (b.x <= p.x || b.x >= p.x + p.w)) b.vx *= -1;
                     b.x += b.vx;
                 }
 
-                // Collision Barrel-Player
                 let dx = player.x + player.w/2 - b.x;
                 let dy = player.y + player.h/2 - b.y;
                 if (Math.sqrt(dx*dx + dy*dy) < 10) {
                     gameState = 'start';
-                    document.getElementById('start-screen').classList.remove('hidden');
+                    startScreen.classList.remove('hidden');
                 }
-                
-                // Remove old barrels
-                if (b.y > canvas.height) barrels.splice(index, 1);
-            });
+                if (b.y > canvas.height) barrels.splice(i, 1);
+            }
 
-            // Win condition (reach the top)
             if (player.y < 55) {
                 score += 100;
                 scoreEl.innerText = score;
                 player.x = 30; player.y = 280;
             }
 
-            // Screen bounds
             if (player.x < 0) player.x = 0;
             if (player.x + player.w > canvas.width) player.x = canvas.width - player.w;
         }
@@ -308,32 +291,20 @@
         function draw() {
             ctx.fillStyle = '#000';
             ctx.fillRect(0, 0, canvas.width, canvas.height);
-
-            // Draw Platforms
             ctx.fillStyle = '#f0a';
             platforms.forEach(p => ctx.fillRect(p.x, p.y, p.w, p.h));
-
-            // Draw Ladders
             ctx.fillStyle = '#0af';
             ladders.forEach(l => {
                 for(let i=0; i<l.h; i+=5) ctx.fillRect(l.x, l.y + i, l.w, 2);
                 ctx.fillRect(l.x, l.y, 2, l.h);
                 ctx.fillRect(l.x + l.w - 2, l.y, 2, l.h);
             });
-
-            // Draw Kong (Simple)
             ctx.fillStyle = '#840';
             ctx.fillRect(100, 20, 25, 30);
-
-            // Draw Princess (Goal)
             ctx.fillStyle = '#f9f';
             ctx.fillRect(130, 34, 10, 16);
-
-            // Draw Player
             ctx.fillStyle = '#f00';
             ctx.fillRect(player.x, player.y, player.w, player.h);
-
-            // Draw Barrels
             ctx.fillStyle = '#e90';
             barrels.forEach(b => {
                 ctx.beginPath();
